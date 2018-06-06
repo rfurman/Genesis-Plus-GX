@@ -570,7 +570,7 @@ static PIXEL_OUT_T pixel_lut[3][0x200];
 static PIXEL_OUT_T pixel_lut_m4[0x40];
 
 /* Background & Sprite line buffers */
-static uint8 linebuf[2][0x200];
+static uint8 linebuf[3][0x200];
 
 /* Sprite limit flag */
 static uint8 spr_ovr;
@@ -698,6 +698,10 @@ static uint32 make_lut_bg(uint32 bx, uint32 ax)
   int af = (ax & 0x7F);
   int ap = (ax & 0x40);
   int a  = (ax & 0x0F);
+
+  // fudge colors
+  //af=ap+1;
+  //bf=bp+2;
 
   int c = (ap ? (a ? af : bf) : (bp ? (b ? bf : af) : (a ? af : bf)));
 
@@ -954,6 +958,22 @@ INLINE void merge(uint8 *srca, uint8 *srcb, uint8 *dst, uint8 *table, int width)
 
 
 /*--------------------------------------------------------------------------*/
+/* Record priorities of the three major layers                              */
+/*--------------------------------------------------------------------------*/
+
+INLINE void record_layer(uint8* src, uint8* dst, int width, uint8 low, uint8 high)
+{
+  do
+  {
+    *dst++ |= ((*src)&0x0F) ? (((*src)&0x40) ? high : low) : 0;
+    src++;
+  }
+  while (--width);
+}
+  
+
+
+/*--------------------------------------------------------------------------*/
 /* Pixel color lookup tables initialization                                 */
 /*--------------------------------------------------------------------------*/
 
@@ -1081,6 +1101,7 @@ void color_update_m4(int index, unsigned int data)
     /* Mode 4 */
     pixel[0x00 | index] = data;
     pixel[0x20 | index] = data;
+    // sprite visibility
     pixel[0x80 | index] = data;
     pixel[0xA0 | index] = data;
   }
@@ -1553,6 +1574,7 @@ void render_bg_m5(int line)
   {
     atbuf = nt[index & pf_col_mask];
     DRAW_COLUMN(atbuf, v_line)
+    //fooo
   }
 
   if (w == (line >= a))
@@ -1646,6 +1668,9 @@ void render_bg_m5(int line)
   }
 
   /* Merge background layers */
+  // foooooo
+  record_layer(&linebuf[0][0x20], &linebuf[2][0x20], bitmap.viewport.w, 1, 2);
+  record_layer(&linebuf[1][0x20], &linebuf[2][0x20], bitmap.viewport.w, 4, 8);
   merge(&linebuf[1][0x20], &linebuf[0][0x20], &linebuf[0][0x20], lut[(reg[12] & 0x08) >> 2], bitmap.viewport.w);
 }
 
@@ -1745,6 +1770,7 @@ void render_bg_m5_vs(int line)
   }
 
   /* Plane A */
+  //a=0;
   if (a)
   {
     /* Plane A width */
@@ -1836,6 +1862,8 @@ void render_bg_m5_vs(int line)
   }
 
   /* Merge background layers */
+  record_layer(&linebuf[0][0x20], &linebuf[2][0x20], bitmap.viewport.w, 1, 2);
+  record_layer(&linebuf[1][0x20], &linebuf[2][0x20], bitmap.viewport.w, 4, 8);
   merge(&linebuf[1][0x20], &linebuf[0][0x20], &linebuf[0][0x20], lut[(reg[12] & 0x08) >> 2], bitmap.viewport.w);
 }
 
@@ -1988,6 +2016,8 @@ void render_bg_m5_im2(int line)
   }
 
   /* Merge background layers */
+  record_layer(&linebuf[0][0x20], &linebuf[2][0x20], bitmap.viewport.w, 1, 2);
+  record_layer(&linebuf[1][0x20], &linebuf[2][0x20], bitmap.viewport.w, 4, 8);
   merge(&linebuf[1][0x20], &linebuf[0][0x20], &linebuf[0][0x20], lut[(reg[12] & 0x08) >> 2], bitmap.viewport.w);
 }
 
@@ -2179,6 +2209,8 @@ void render_bg_m5_im2_vs(int line)
   }
 
   /* Merge background layers */
+  record_layer(&linebuf[0][0x20], &linebuf[2][0x20], bitmap.viewport.w, 1, 2);
+  record_layer(&linebuf[1][0x20], &linebuf[2][0x20], bitmap.viewport.w, 4, 8);
   merge(&linebuf[1][0x20], &linebuf[0][0x20], &linebuf[0][0x20], lut[(reg[12] & 0x08) >> 2], bitmap.viewport.w);
 }
 
@@ -3352,6 +3384,7 @@ void render_obj_m5_ste(int line)
       spr_ovr = (pixelcount >= bitmap.viewport.w);
 
       /* Merge background & sprite layers */
+      record_layer(&linebuf[1][0x20], &linebuf[2][0x20], bitmap.viewport.w, 16, 32);
       merge(&linebuf[1][0x20], &linebuf[0][0x20], &linebuf[0][0x20], lut[4], bitmap.viewport.w);
 
       /* Stop sprite rendering */
@@ -3366,6 +3399,7 @@ void render_obj_m5_ste(int line)
   spr_ovr = 0;
 
   /* Merge background & sprite layers */
+  record_layer(&linebuf[1][0x20], &linebuf[2][0x20], bitmap.viewport.w, 16, 32);
   merge(&linebuf[1][0x20], &linebuf[0][0x20], &linebuf[0][0x20], lut[4], bitmap.viewport.w);
 }
 
@@ -3579,6 +3613,7 @@ void render_obj_m5_im2_ste(int line)
       spr_ovr = (pixelcount >= bitmap.viewport.w);
 
       /* Merge background & sprite layers */
+      record_layer(&linebuf[1][0x20], &linebuf[2][0x20], bitmap.viewport.w, 16, 32);
       merge(&linebuf[1][0x20], &linebuf[0][0x20], &linebuf[0][0x20], lut[4], bitmap.viewport.w);
 
       /* Stop sprite rendering */
@@ -3593,6 +3628,7 @@ void render_obj_m5_im2_ste(int line)
   spr_ovr = 0;
 
   /* Merge background & sprite layers */
+  record_layer(&linebuf[1][0x20], &linebuf[2][0x20], bitmap.viewport.w, 16, 32);
   merge(&linebuf[1][0x20], &linebuf[0][0x20], &linebuf[0][0x20], lut[4], bitmap.viewport.w);
 }
 
@@ -4094,6 +4130,7 @@ void render_reset(void)
 
 void render_line(int line)
 {
+  memset(&linebuf[2][0], 0, bitmap.viewport.w + 0x40);
   /* Check display status */
   if (reg[1] & 0x40)
   {
@@ -4151,12 +4188,15 @@ void render_line(int line)
 
   /* Pixel color remapping */
   remap_line(line);
+  remap_mask(line);
 }
 
 void blank_line(int line, int offset, int width)
 {
   memset(&linebuf[0][0x20 + offset], 0x40, width);
+  memset(&linebuf[2][0x20 + offset], 0x40, width);
   remap_line(line);
+  remap_mask(line);
 }
 
 void remap_line(int line)
@@ -4186,10 +4226,12 @@ void remap_line(int line)
     if (reg[12] & 0x01)
     {
       md_ntsc_blit(md_ntsc, ( MD_NTSC_IN_T const * )pixel, src, width, line);
+      //md_ntsc_blit(md_ntsc, ( MD_NTSC_IN_T const * )pixel, src, width, line + bitmap.viewport.h);
     }
     else
     {
       sms_ntsc_blit(sms_ntsc, ( SMS_NTSC_IN_T const * )pixel, src, width, line);
+      //sms_ntsc_blit(sms_ntsc, ( SMS_NTSC_IN_T const * )pixel, src, width, line + bitmap.viewport.h);
     }
   }
   else
@@ -4218,4 +4260,45 @@ void remap_line(int line)
     }
  #endif
   }
+}
+
+
+
+
+
+
+void remap_mask(int line)
+{
+  /* Line width */
+  int width = bitmap.viewport.w + 2*bitmap.viewport.x;
+
+  /* Pixel line buffer */
+  uint8 *src = &linebuf[2][0x20 - bitmap.viewport.x];
+  uint8 *src2 = &linebuf[0][0x20 - bitmap.viewport.x];
+
+  /* Adjust line offset in framebuffer */
+  line = (line + bitmap.viewport.y) % lines_per_frame;
+
+  /* Take care of Game Gear reduced screen when overscan is disabled */
+  if (line < 0) return;
+
+  /* Adjust for interlaced output */
+  if (interlaced && config.render)
+  {
+    line = (line * 2) + odd_frame;
+  }
+
+  /* Convert VDP pixel data to output pixel format */
+  PIXEL_OUT_T *dst = ((PIXEL_OUT_T *)&bitmap.data[((line+bitmap.viewport.h) * bitmap.pitch)]);
+  do
+  {
+    uint8 i = *src++;
+    uint8 i2 = *src2++;
+    uint8 r = 0;//(i&3)*8;
+    uint8 g = ((i>>2)&3)*31;
+    uint8 b = (i2&0x80)?31:0;
+    //uint8 b = ((i>>4)&3)*8;
+    *dst++ = (r << 11) | (g << 5) | b;
+  }
+  while (--width);
 }
